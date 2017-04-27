@@ -1,0 +1,23 @@
+import arcpy
+
+path = r"C:\Users\ChazL\Documents\University Year 4\GEOG5230M - Professional Development\Project"
+arcpy.env.workspace = path
+
+# Creates the feature class for the boundary
+arcpy.CreateFeatureclass_management(path, "boundary.shp", "POLYGON")
+
+# Create polygon of size 10km x 10km
+array = arcpy.Array([arcpy.Point(0, 0),
+                     arcpy.Point(0, 10000),
+                     arcpy.Point(10000, 10000),
+                     arcpy.Point(10000, 0)
+                     ])
+polygon = arcpy.Polygon(array)
+
+# Open an InsertCursor and insert polygon
+cursor = arcpy.da.InsertCursor(path + r"\boundary.shp", ["SHAPE@"])
+cursor.insertRow([polygon])
+
+# Delete cursor object
+del cursor
+
