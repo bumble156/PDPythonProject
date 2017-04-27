@@ -19,6 +19,7 @@ interval = 0
 numberOfBins = 20
 bins = [[0.0 for x in range(numberOfBins)] for y in range(2)]
 
+# Previous location of initial burglary
 prevPoint = (0,0)
 
 
@@ -40,7 +41,6 @@ def setNumbers(filename):
             j = j + 1
             
         bins[1][i] = bins[1][i] / len(data)
-        #print str(bins[0][i])+ " \t\t" + str(bins[1][i])
         i = i + 1
 
 # Returns a number at a rate determined by a preset distribution
@@ -157,35 +157,53 @@ def randomPoints(interimName, boundary, numPoints, iterVal, pointType):
     # Adds the subsequent points into the burglaries.shp class that will contain all burglaries        
     arcpy.Append_management(interimName, "burglaries.shp", "NO_TEST")
 
-def specificPoint(distance, interimName, boundary, iterVal):
+# Function to add a specific point at a distance from the previous initil burglary point to the burglaries shape file
+# Note the interim file must be separately deleted before it can be reused
+def specificPoint(distance, bearing, interimName, boundary, iterVal):
 
     global prevPoint
-    bearing =  0
+
+    # Generate a random bearing from the previous point
     angle = 90 - bearing
     bearing = math.radians(bearing)
     angle =   math.radians(angle)
 
+    # Use trigonometry to calculate new point location
     cosa = math.cos(angle)
     cosb = math.cos(bearing)
     xNew, yNew = \
         (prevPoint[0] +(distance * cosa), prevPoint[1]+(distance * cosb))
+    point = arcpy.Point(xNew, yNew)
 
-    row = ((xNew, yNew), iterVal, "INITIAL")
+    # Search in boundary file
+    cursor = arcpy.SearchCursor(boundary)
+    for rowid in cursor:
+        # Get boundary polygon
+        polygon = rowid.Shape
 
-    # Creates the feature class
-    arcpy.CreateFeatureclass_management(path, interimName, "POINT")
-    arcpy.AddField_management(interimName, "ITER", "SHORT")
-    arcpy.AddField_management(interimName, "TYPE", "TEXT")
+        #If new point is inside boundary
+        if polygon.contains(point):
+            # Create the row to be added to the initPoint shapefile
+            row = ((xNew, yNew), iterVal, "INITIAL")
 
-    cursor = arcpy.da.InsertCursor(interimName, ["SHAPE@XY", "ITER", "TYPE"])
+            # Creates the feature class
+            arcpy.CreateFeatureclass_management(path, interimName, "POINT")
+            arcpy.AddField_management(interimName, "ITER", "SHORT")
+            arcpy.AddField_management(interimName, "TYPE", "TEXT")
 
-    cursor.insertRow(row)
-    del cursor
+            # Uses an update cursor to add to the interim file
+            cursor = arcpy.da.InsertCursor(interimName, ["SHAPE@XY", "ITER", "TYPE"])
+            cursor.insertRow(row)
+            del cursor
 
-    # Adds the subsequent point into the burglaries.shp class that will contain all burglaries        
-    arcpy.Append_management(interimName, "burglaries.shp", "NO_TEST")
+            # Adds the subsequent point into the burglaries.shp class that will contain all burglaries        
+            arcpy.Append_management(interimName, "burglaries.shp", "NO_TEST")
 
-    prevPoint = (xNew, yNew)
+            # Updates the prebvious point location
+            prevPoint = (xNew, yNew)
+        else:
+            # Try again using the same function parameters but a new random bearing value
+            specificPoint(distance, random.randint(0, 360), interimName, boundary, iterVal)
 
 
 # Funtion to add a new burglary cluster within the boundary    
@@ -193,11 +211,9 @@ def newZone(distance):
     if distance == 0:
         # Creates the first random burglary point
         randomPoints("initPoint.shp", "boundary.shp", 1, iteration, "INITIAL")
-        print "Created random point"
     else:
         # Creates subsequent burglary point at specific position
-        specificPoint(distance, "initPoint.shp", "boundary.shp", iteration)
-        print "Created specific point at distance " + str(distance)
+        specificPoint(distance, random.randint(0, 360), "initPoint.shp", "boundary.shp", iteration)
     
     # Creates the buffer around the initial point
     arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", bufferSize)
