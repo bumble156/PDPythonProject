@@ -9,7 +9,9 @@ threshold = 80
 iterations = 10
 
 # Creates the feature class for the boundary
-try:
+if arcpy.Exists("boundary.shp"):
+    print "Boundary file exists"
+else:
     arcpy.CreateFeatureclass_management(path, "boundary.shp", "POLYGON")
 
     # Create polygon of size 10km x 10km
@@ -25,18 +27,28 @@ try:
     cursor.insertRow([polygon])
     del cursor
     print "Boundary file created"
-except:
-    print "Boundary file exists"
 
 # Creates the feature class for the burglaries
-try:
+if arcpy.Exists("burglaries.shp"):
+    arcpy.DeleteFeatures_management("burglaries.shp")
+    print "Burglaries file exists"
+else:
     arcpy.CreateFeatureclass_management(path, "burglaries.shp", "POINT")
     arcpy.AddField_management("burglaries.shp", "CID", "LONG", "10")
     arcpy.DeleteField_management("burglaries.shp", "Id")
     print "Burglaries file created"
-except:
-    print "Burglaries file exists"
-    ##TODO: Delete data from past burglaries
+
+# Creates the feature class for the buffers
+if arcpy.Exists("buffers.shp"):
+    arcpy.DeleteFeatures_management("buffers.shp")
+    print "Buffers file exists"
+else:
+    arcpy.CreateFeatureclass_management(path, "buffers.shp", "POLYGON")
+    arcpy.AddField_management("buffers.shp", "CID", "LONG", "10")
+    arcpy.AddField_management("buffers.shp", "BUFF_DIST", "DOUBLE")
+    arcpy.AddField_management("buffers.shp", "ORIG_FID", "LONG", "10")
+    arcpy.DeleteField_management("buffers.shp", "Id")
+    print "Buffers file created"
 
 ## Creates one burglary 'zone'
 iteration = 0
@@ -44,11 +56,14 @@ while iteration < iterations:
     # Creates the first random burglary point
     arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1) 
 
+    # Adds the initial point into the burglaries.shp class that will contain all burglaries
+    arcpy.Append_management("initPoint.shp", "burglaries.shp", "TEST")
+
     # Creates the buffer around the initial point
     arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", bufferSize)
 
-    # Adds the initial point into the burglaries.shp class that will contain all burglaries
-    arcpy.Append_management("initPoint.shp", "burglaries.shp", "TEST")
+    # Adds the buffer into the buffers.shp class that will contain all buffers
+    arcpy.Append_management("initBuff.shp", "buffers.shp", "TEST")
 
     ##TODO: Add in type field to store type of burglary
     
@@ -60,8 +75,7 @@ while iteration < iterations:
     while random.randint(0, 100) < threshold:
         subsequent += 1
 
-    ##TODO: Add 1 to iterations and burglaries
-    print "Iteration " + str(iteration) + " has " + str(subsequent) + " burglaries."
+    print "Iteration " + str(iteration + 1) + " has " + str(subsequent + 1) + " burglaries."
 
     if subsequent != 0:
         ## Generate further burglaries in area
@@ -75,4 +89,5 @@ while iteration < iterations:
     arcpy.Delete_management("initBuff.shp")
 
     iteration += 1
+    
 
