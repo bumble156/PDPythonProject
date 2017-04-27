@@ -5,7 +5,8 @@ arcpy.env.workspace = path
 
 # Variables
 bufferSize = "300 Meters"
-threshold = 90
+threshold = 80
+iterations = 10
 
 # Creates the feature class for the boundary
 try:
@@ -35,25 +36,43 @@ try:
     print "Burglaries file created"
 except:
     print "Burglaries file exists"
+    ##TODO: Delete data from past burglaries
 
+## Creates one burglary 'zone'
+iteration = 0
+while iteration < iterations:
+    # Creates the first random burglary point
+    arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1) 
 
-# Creates the first random burglary point
-arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1) 
+    # Creates the buffer around the initial point
+    arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", bufferSize)
 
-# Creates the buffer around the initial point
-arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", bufferSize)
+    # Adds the initial point into the burglaries.shp class that will contain all burglaries
+    arcpy.Append_management("initPoint.shp", "burglaries.shp", "TEST")
 
-# Adds the initial point into the burglaries.shp class that will contain all burglaries
-arcpy.Append_management("initPoint.shp", "burglaries.shp", "TEST")
+    ##TODO: Add in type field to store type of burglary
+    
+    ## Delete the initial point so the class can be reused
+    arcpy.Delete_management("initPoint.shp")
 
-##TODO: Add in type field to store type of burglary
-##TODO: Delete the initial point so the code can be reused
+    ## Calculate number of further burglaries
+    subsequent = 0
+    while random.randint(0, 100) < threshold:
+        subsequent += 1
 
-## Generate further burglaries in area
-subsequent = 0
-while random.randint(0, 100) < threshold:
-    subsequent += 1
+    ##TODO: Add 1 to iterations and burglaries
+    print "Iteration " + str(iteration) + " has " + str(subsequent) + " burglaries."
 
-arcpy.CreateRandomPoints_management(path, "subsPoint", "initBuff.shp", "", subsequent) 
-arcpy.Append_management("subsPoint.shp", "burglaries.shp", "TEST")
+    if subsequent != 0:
+        ## Generate further burglaries in area
+        arcpy.CreateRandomPoints_management(path, "subsPoint", "initBuff.shp", "", subsequent) 
+        arcpy.Append_management("subsPoint.shp", "burglaries.shp", "TEST")
+
+        ## Delete the subsequent points so the class can be reused
+        arcpy.Delete_management("subsPoint.shp")
+
+    ## Delete the initial buffer so the class can be reused
+    arcpy.Delete_management("initBuff.shp")
+
+    iteration += 1
 
