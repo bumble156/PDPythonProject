@@ -5,9 +5,9 @@ arcpy.env.workspace = path
 
 # Variables
 bufferSize = "300 Meters"
-threshold = 80
-iterations = 5
-
+threshold = 85
+iterations = 10
+backgroundBurglaries = 100
 
 # Creates the feature class for the boundary
 if arcpy.Exists("boundary.shp"):
@@ -36,7 +36,7 @@ if arcpy.Exists("burglaries.shp"):
 else:
     arcpy.CreateFeatureclass_management(path, "burglaries.shp", "POINT")
     arcpy.AddField_management("burglaries.shp", "ITER", "SHORT")
-    arcpy.AddField_management("burglaries.shp", "INITIAL", "TEXT")
+    arcpy.AddField_management("burglaries.shp", "TYPE", "TEXT")
     print "Burglaries file created"
 
 # Creates the feature class for the buffers
@@ -56,15 +56,15 @@ while iteration <= iterations:
     # Creates the first random burglary point
     arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1)
     arcpy.AddField_management("initPoint.shp", "ITER", "SHORT")
-    arcpy.AddField_management("initPoint.shp", "INITIAL", "TEXT")
+    arcpy.AddField_management("initPoint.shp", "TYPE", "TEXT")
 
     # Updates the fields in the table
-    with arcpy.da.UpdateCursor("initPoint.shp", ["ITER", "INITIAL"]) as cursor:
+    with arcpy.da.UpdateCursor("initPoint.shp", ["ITER", "TYPE"]) as cursor:
         for row in cursor:
             # The iteration number
             row[0] = iteration
             # Whether the point is the initial burglary in the area
-            row[1] = "TRUE"
+            row[1] = "INTIIAL"
             cursor.updateRow(row)
 
     # Adds the initial point into the burglaries.shp class that will contain all burglaries
@@ -90,13 +90,13 @@ while iteration <= iterations:
         # Generate further burglaries in area
         arcpy.CreateRandomPoints_management(path, "subsPoint", "initBuff.shp", "", subsequent) 
         arcpy.AddField_management("subsPoint.shp", "ITER", "SHORT")
-        arcpy.AddField_management("subsPoint.shp", "INITIAL", "TEXT")
+        arcpy.AddField_management("subsPoint.shp", "TYPE", "TEXT")
 
         # Updates the fields in the table
-        with arcpy.da.UpdateCursor("subsPoint.shp", ["ITER", "INITIAL"]) as cursor:
+        with arcpy.da.UpdateCursor("subsPoint.shp", ["ITER", "TYPE"]) as cursor:
             for row in cursor:
                 row[0] = iteration
-                row[1] = "FALSE"
+                row[1] = "SECONDARY"
                 cursor.updateRow(row)
 
         # Adds the subsequent points into the burglaries.shp class that will contain all burglaries        
@@ -109,3 +109,21 @@ while iteration <= iterations:
     arcpy.Delete_management("initBuff.shp")
 
     iteration += 1
+
+# Creates the background burglaries (i.e. random noise)
+arcpy.CreateRandomPoints_management(path, "randomNoise", "boundary.shp", "", backgroundBurglaries)
+arcpy.AddField_management("randomNoise.shp", "ITER", "SHORT")
+arcpy.AddField_management("randomNoise.shp", "TYPE", "TEXT")
+
+# Updates the fields in the table
+with arcpy.da.UpdateCursor("randomNoise.shp", ["ITER", "TYPE"]) as cursor:
+    for row in cursor:
+        row[0] = 0
+        row[1] = "BACKGROUND"
+        cursor.updateRow(row)
+
+# Adds the subsequent points into the burglaries.shp class that will contain all burglaries        
+arcpy.Append_management("randomNoise.shp", "burglaries.shp", "NO_TEST")
+
+# Delete the subsequent points so the class can be reused
+arcpy.Delete_management("randomNoise.shp")
