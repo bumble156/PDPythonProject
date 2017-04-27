@@ -1,10 +1,11 @@
-import arcpy, os.path
+import arcpy, os.path, random
 
 path = r"C:\PythonWorkspace\PDProject"
 arcpy.env.workspace = path
 
 # Variables
 bufferSize = "300 Meters"
+threshold = 90
 
 # Creates the feature class for the boundary
 try:
@@ -35,6 +36,7 @@ try:
 except:
     print "Burglaries file exists"
 
+
 # Creates the first random burglary point
 arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1) 
 
@@ -46,3 +48,12 @@ arcpy.Append_management("initPoint.shp", "burglaries.shp", "TEST")
 
 ##TODO: Add in type field to store type of burglary
 ##TODO: Delete the initial point so the code can be reused
+
+## Generate further burglaries in area
+subsequent = 0
+while random.randint(0, 100) < threshold:
+    subsequent += 1
+
+arcpy.CreateRandomPoints_management(path, "subsPoint", "initBuff.shp", "", subsequent) 
+arcpy.Append_management("subsPoint.shp", "burglaries.shp", "TEST")
+
