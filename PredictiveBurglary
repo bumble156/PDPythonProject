@@ -6,7 +6,8 @@ arcpy.env.workspace = path
 # Variables
 bufferSize = "300 Meters"
 threshold = 80
-iterations = 10
+iterations = 5
+
 
 # Creates the feature class for the boundary
 if arcpy.Exists("boundary.shp"):
@@ -34,8 +35,8 @@ if arcpy.Exists("burglaries.shp"):
     print "Burglaries file exists"
 else:
     arcpy.CreateFeatureclass_management(path, "burglaries.shp", "POINT")
-    arcpy.AddField_management("burglaries.shp", "CID", "LONG", "10")
-    arcpy.DeleteField_management("burglaries.shp", "Id")
+    arcpy.AddField_management("burglaries.shp", "ITER", "SHORT")
+    arcpy.AddField_management("burglaries.shp", "INITIAL", "TEXT")
     print "Burglaries file created"
 
 # Creates the feature class for the buffers
@@ -44,50 +45,67 @@ if arcpy.Exists("buffers.shp"):
     print "Buffers file exists"
 else:
     arcpy.CreateFeatureclass_management(path, "buffers.shp", "POLYGON")
-    arcpy.AddField_management("buffers.shp", "CID", "LONG", "10")
-    arcpy.AddField_management("buffers.shp", "BUFF_DIST", "DOUBLE")
-    arcpy.AddField_management("buffers.shp", "ORIG_FID", "LONG", "10")
-    arcpy.DeleteField_management("buffers.shp", "Id")
+    arcpy.AddField_management("buffers.shp", "ITER", "SHORT")
     print "Buffers file created"
 
-## Creates one burglary 'zone'
-iteration = 0
-while iteration < iterations:
+
+# Creates one burglary 'zone'
+iteration = 1
+while iteration <= iterations:
+
     # Creates the first random burglary point
-    arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1) 
+    arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1)
+    arcpy.AddField_management("initPoint.shp", "ITER", "SHORT")
+    arcpy.AddField_management("initPoint.shp", "INITIAL", "TEXT")
+
+    # Updates the fields in the table
+    with arcpy.da.UpdateCursor("initPoint.shp", ["ITER", "INITIAL"]) as cursor:
+        for row in cursor:
+            # The iteration number
+            row[0] = iteration
+            # Whether the point is the initial burglary in the area
+            row[1] = "TRUE"
+            cursor.updateRow(row)
 
     # Adds the initial point into the burglaries.shp class that will contain all burglaries
-    arcpy.Append_management("initPoint.shp", "burglaries.shp", "TEST")
+    arcpy.Append_management("initPoint.shp", "burglaries.shp", "NO_TEST")
 
     # Creates the buffer around the initial point
     arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", bufferSize)
 
     # Adds the buffer into the buffers.shp class that will contain all buffers
-    arcpy.Append_management("initBuff.shp", "buffers.shp", "TEST")
-
-    ##TODO: Add in type field to store type of burglary
+    arcpy.Append_management("initBuff.shp", "buffers.shp", "NO_TEST")
     
-    ## Delete the initial point so the class can be reused
+    # Delete the initial point so the class can be reused
     arcpy.Delete_management("initPoint.shp")
 
-    ## Calculate number of further burglaries
+    # Calculate number of further burglaries
     subsequent = 0
     while random.randint(0, 100) < threshold:
         subsequent += 1
 
-    print "Iteration " + str(iteration + 1) + " has " + str(subsequent + 1) + " burglaries."
+    print "Iteration " + str(iteration) + " has " + str(subsequent + 1) + " burglaries."
 
     if subsequent != 0:
-        ## Generate further burglaries in area
+        # Generate further burglaries in area
         arcpy.CreateRandomPoints_management(path, "subsPoint", "initBuff.shp", "", subsequent) 
-        arcpy.Append_management("subsPoint.shp", "burglaries.shp", "TEST")
+        arcpy.AddField_management("subsPoint.shp", "ITER", "SHORT")
+        arcpy.AddField_management("subsPoint.shp", "INITIAL", "TEXT")
 
-        ## Delete the subsequent points so the class can be reused
+        # Updates the fields in the table
+        with arcpy.da.UpdateCursor("subsPoint.shp", ["ITER", "INITIAL"]) as cursor:
+            for row in cursor:
+                row[0] = iteration
+                row[1] = "FALSE"
+                cursor.updateRow(row)
+
+        # Adds the subsequent points into the burglaries.shp class that will contain all burglaries        
+        arcpy.Append_management("subsPoint.shp", "burglaries.shp", "NO_TEST")
+
+        # Delete the subsequent points so the class can be reused
         arcpy.Delete_management("subsPoint.shp")
 
-    ## Delete the initial buffer so the class can be reused
+    # Delete the initial buffer so the class can be reused
     arcpy.Delete_management("initBuff.shp")
 
     iteration += 1
-    
-
