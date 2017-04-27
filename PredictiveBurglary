@@ -5,9 +5,9 @@ arcpy.env.workspace = path
 
 # Variables
 bufferSize = "300 Meters"
-threshold = 85
-iterations = 10
-backgroundBurglaries = 100
+threshold = 80
+iterations = 5
+backgroundBurglaries = 50
 
 # Creates the feature class for the boundary
 if arcpy.Exists("boundary.shp"):
@@ -48,28 +48,32 @@ else:
     arcpy.AddField_management("buffers.shp", "ITER", "SHORT")
     print "Buffers file created"
 
+# Function to add random points within a boundary and append to the burglaries shape file
+# Note the interim file must be separately deleted before it can be reused
+def randomPoints(interimName, boundary, numPoints, iterVal, pointType):
+    # Creates the random points
+    arcpy.CreateRandomPoints_management(path, interimName, boundary, "", numPoints)
+    arcpy.AddField_management(interimName, "ITER", "SHORT")
+    arcpy.AddField_management(interimName, "TYPE", "TEXT")
 
+    # Updates the fields in the table
+    with arcpy.da.UpdateCursor(interimName, ["ITER", "TYPE"]) as cursor:
+        for row in cursor:
+            row[0] = iterVal
+            row[1] = pointType
+            cursor.updateRow(row)
+
+    # Adds the subsequent points into the burglaries.shp class that will contain all burglaries        
+    arcpy.Append_management(interimName, "burglaries.shp", "NO_TEST")
+
+    
 # Creates one burglary 'zone'
 iteration = 1
 while iteration <= iterations:
 
     # Creates the first random burglary point
-    arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1)
-    arcpy.AddField_management("initPoint.shp", "ITER", "SHORT")
-    arcpy.AddField_management("initPoint.shp", "TYPE", "TEXT")
-
-    # Updates the fields in the table
-    with arcpy.da.UpdateCursor("initPoint.shp", ["ITER", "TYPE"]) as cursor:
-        for row in cursor:
-            # The iteration number
-            row[0] = iteration
-            # Whether the point is the initial burglary in the area
-            row[1] = "INTIIAL"
-            cursor.updateRow(row)
-
-    # Adds the initial point into the burglaries.shp class that will contain all burglaries
-    arcpy.Append_management("initPoint.shp", "burglaries.shp", "NO_TEST")
-
+    randomPoints("initPoint.shp", "boundary.shp", 1, iteration, "INITIAL")
+    
     # Creates the buffer around the initial point
     arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", bufferSize)
 
@@ -88,20 +92,8 @@ while iteration <= iterations:
 
     if subsequent != 0:
         # Generate further burglaries in area
-        arcpy.CreateRandomPoints_management(path, "subsPoint", "initBuff.shp", "", subsequent) 
-        arcpy.AddField_management("subsPoint.shp", "ITER", "SHORT")
-        arcpy.AddField_management("subsPoint.shp", "TYPE", "TEXT")
-
-        # Updates the fields in the table
-        with arcpy.da.UpdateCursor("subsPoint.shp", ["ITER", "TYPE"]) as cursor:
-            for row in cursor:
-                row[0] = iteration
-                row[1] = "SECONDARY"
-                cursor.updateRow(row)
-
-        # Adds the subsequent points into the burglaries.shp class that will contain all burglaries        
-        arcpy.Append_management("subsPoint.shp", "burglaries.shp", "NO_TEST")
-
+        randomPoints("subsPoint.shp", "initBuff.shp", subsequent, iteration, "SECONDARY")
+        
         # Delete the subsequent points so the class can be reused
         arcpy.Delete_management("subsPoint.shp")
 
@@ -111,19 +103,7 @@ while iteration <= iterations:
     iteration += 1
 
 # Creates the background burglaries (i.e. random noise)
-arcpy.CreateRandomPoints_management(path, "randomNoise", "boundary.shp", "", backgroundBurglaries)
-arcpy.AddField_management("randomNoise.shp", "ITER", "SHORT")
-arcpy.AddField_management("randomNoise.shp", "TYPE", "TEXT")
-
-# Updates the fields in the table
-with arcpy.da.UpdateCursor("randomNoise.shp", ["ITER", "TYPE"]) as cursor:
-    for row in cursor:
-        row[0] = 0
-        row[1] = "BACKGROUND"
-        cursor.updateRow(row)
-
-# Adds the subsequent points into the burglaries.shp class that will contain all burglaries        
-arcpy.Append_management("randomNoise.shp", "burglaries.shp", "NO_TEST")
+randomPoints("randomNoise.shp", "boundary.shp", backgroundBurglaries, 0, "BACKGROUND")
 
 # Delete the subsequent points so the class can be reused
 arcpy.Delete_management("randomNoise.shp")
