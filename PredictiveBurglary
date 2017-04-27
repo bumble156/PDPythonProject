@@ -3,10 +3,11 @@ import arcpy, os.path
 path = r"C:\PythonWorkspace\PDProject"
 arcpy.env.workspace = path
 
+# Variables
+bufferSize = "300 Meters"
+
 # Creates the feature class for the boundary
-if os.path.isfile("boundary.shp"):
-    print "Boundary file exists"
-else:
+try:
     arcpy.CreateFeatureclass_management(path, "boundary.shp", "POLYGON")
 
     # Create polygon of size 10km x 10km
@@ -21,17 +22,27 @@ else:
     cursor = arcpy.da.InsertCursor("boundary.shp", ["SHAPE@"])
     cursor.insertRow([polygon])
     del cursor
+    print "Boundary file created"
+except:
+    print "Boundary file exists"
 
 # Creates the feature class for the burglaries
-if os.path.isfile("burglaries.shp"):
-    print "Burglary file exists"
-else:
+try:
     arcpy.CreateFeatureclass_management(path, "burglaries.shp", "POINT")
+    arcpy.AddField_management("burglaries.shp", "CID", "LONG", "10")
+    arcpy.DeleteField_management("burglaries.shp", "Id")
+    print "Burglaries file created"
+except:
+    print "Burglaries file exists"
 
-# Create the first random burglary point
-arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1)
+# Creates the first random burglary point
+arcpy.CreateRandomPoints_management(path, "initPoint", "boundary.shp", "", 1) 
 
-##TODO Get initPoint into burglaries.shp using SearchCursor then InsertCursor
-##TODO Use AddField to add that initPoint is an initial point not a subsequent point
+# Creates the buffer around the initial point
+arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", bufferSize)
 
-arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", "300 Meters")
+# Adds the initial point into the burglaries.shp class that will contain all burglaries
+arcpy.Append_management("initPoint.shp", "burglaries.shp", "TEST")
+
+##TODO: Add in type field to store type of burglary
+##TODO: Delete the initial point so the code can be reused
