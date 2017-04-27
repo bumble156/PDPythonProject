@@ -1,4 +1,4 @@
-import arcpy, os.path, random
+import arcpy, os.path, random, math
 from numpy import genfromtxt
 
 path = r"C:\PythonWorkspace\PDProject"
@@ -18,6 +18,8 @@ minNum = 0
 interval = 0
 numberOfBins = 20
 bins = [[0.0 for x in range(numberOfBins)] for y in range(2)]
+
+prevPoint = (0,0)
 
 
 # The following classes for performing Monte Carlo sampling are adapted from the work of Sim Reaney and Andy Evans at
@@ -135,26 +137,67 @@ def setup():
 # Function to add random points within a boundary and append to the burglaries shape file
 # Note the interim file must be separately deleted before it can be reused
 def randomPoints(interimName, boundary, numPoints, iterVal, pointType):
+
+    global prevPoint
+    
     # Creates the random points
     arcpy.CreateRandomPoints_management(path, interimName, boundary, "", numPoints)
     arcpy.AddField_management(interimName, "ITER", "SHORT")
     arcpy.AddField_management(interimName, "TYPE", "TEXT")
 
     # Updates the fields in the table
-    with arcpy.da.UpdateCursor(interimName, ["ITER", "TYPE"]) as cursor:
+    with arcpy.da.UpdateCursor(interimName, ["ITER", "TYPE", "SHAPE@XY"]) as cursor:
         for row in cursor:
             row[0] = iterVal
             row[1] = pointType
+            if pointType == "INITIAL":
+                prevPoint = (row[2][0], row[2][1])
             cursor.updateRow(row)
 
     # Adds the subsequent points into the burglaries.shp class that will contain all burglaries        
     arcpy.Append_management(interimName, "burglaries.shp", "NO_TEST")
 
+def specificPoint(distance, interimName, boundary, iterVal):
+
+    global prevPoint
+    bearing =  0
+    angle = 90 - bearing
+    bearing = math.radians(bearing)
+    angle =   math.radians(angle)
+
+    cosa = math.cos(angle)
+    cosb = math.cos(bearing)
+    xNew, yNew = \
+        (prevPoint[0] +(distance * cosa), prevPoint[1]+(distance * cosb))
+
+    row = ((xNew, yNew), iterVal, "INITIAL")
+
+    # Creates the feature class
+    arcpy.CreateFeatureclass_management(path, interimName, "POINT")
+    arcpy.AddField_management(interimName, "ITER", "SHORT")
+    arcpy.AddField_management(interimName, "TYPE", "TEXT")
+
+    cursor = arcpy.da.InsertCursor(interimName, ["SHAPE@XY", "ITER", "TYPE"])
+
+    cursor.insertRow(row)
+    del cursor
+
+    # Adds the subsequent point into the burglaries.shp class that will contain all burglaries        
+    arcpy.Append_management(interimName, "burglaries.shp", "NO_TEST")
+
+    prevPoint = (xNew, yNew)
+
 
 # Funtion to add a new burglary cluster within the boundary    
-def newZone():
-    # Creates the first random burglary point
-    randomPoints("initPoint.shp", "boundary.shp", 1, iteration, "INITIAL")
+def newZone(distance):
+    if distance == 0:
+        # Creates the first random burglary point
+        randomPoints("initPoint.shp", "boundary.shp", 1, iteration, "INITIAL")
+        print "Created random point"
+    else:
+        # Creates subsequent burglary point at specific position
+        specificPoint(distance, "initPoint.shp", "boundary.shp", iteration)
+        print "Created specific point at distance " + str(distance)
     
     # Creates the buffer around the initial point
     arcpy.Buffer_analysis("initPoint.shp", "initBuff.shp", bufferSize)
@@ -197,9 +240,11 @@ def randomNoise():
 setup()
 
 iteration = 1
+newZone(0)
+iteration += 1
+
 while iteration <= iterations:
-    newZone()
+    newZone(getNumber(random.uniform(0,1)))
     iteration += 1
 
 randomNoise()
-print getNumber(random.uniform(0,1))
