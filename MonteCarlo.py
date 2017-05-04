@@ -1,3 +1,6 @@
+# This code was adapted from the work of Sim Reaney and Andy Evans
+# Source: http://www.geog.leeds.ac.uk/courses/other/programming/info/code/modelling/calibration/MonteCarlo.java
+
 from numpy import genfromtxt
 import random
 
